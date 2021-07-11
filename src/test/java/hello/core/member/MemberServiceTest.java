@@ -11,14 +11,14 @@ public class MemberServiceTest {
 
     @Test
     void join(){
-        //given
+        //given = 아래구문 처럼 환경이 주어졌을 때
         Member member = new Member(1L, "memberA", Grade.VIP);
 
-        //when
+        //when = 아래 구문 처럼 행동했을 때
         memberService.join(member);
         Member findMember = memberService.findMember(1L);
 
-        //then
+        //then = 아래구문 처럼 된다.
         Assertions.assertThat(member).isEqualTo(findMember);
     }
 }
