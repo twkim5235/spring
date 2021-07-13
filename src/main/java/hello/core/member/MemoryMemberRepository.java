@@ -1,6 +1,4 @@
-package hello.core.repository;
-
-import hello.core.member.Member;
+package hello.core.member;
 
 import java.util.HashMap;
 import java.util.Map;
