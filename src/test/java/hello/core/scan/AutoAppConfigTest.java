@@ -11,7 +11,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class AutoAppConfigTest {
 
     @Test
-    void basicSacn(){
+    void basicScan(){
         AnnotationConfigApplicationContext ac = new AnnotationConfigApplicationContext(AutoAppConfig.class);
 
         MemberService memberService = ac.getBean(MemberService.class);
