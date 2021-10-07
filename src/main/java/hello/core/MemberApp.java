@@ -13,6 +13,11 @@ public class MemberApp {
         //AppConfig appConfig = new AppConfig();
         //MemberService memberService = appConfig.memberService();
 
+        /**
+         * 스프링을 관리해주는 컨테이너 생성
+         * annotation기반의 컨테이너 생성
+         * 기본적으로 Bean의 이름은 메소드 명으로 정해진다.
+         */
         ApplicationContext ac = new AnnotationConfigApplicationContext(AppConfig.class);
         MemberService memberService = ac.getBean("memberService", MemberService.class);
 
