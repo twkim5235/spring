@@ -215,8 +215,6 @@ Spring 공부
 - 쉽게 이야기해서 구현 클래스에 의존하지 말고, 인터페이스에 의존하라는 뜻
 - **역할(Role)에 의존하게 해야 한다는 것과 같다.** 객체 세상도 클라이언트가 인터페이스에 의존해야 유연하게 구현체를 변경할 수 있다! 구현체에 의존하게 되면 변경이 아주 어려워진다.
 
-
-
 #### 정리
 
 - 객체 지향의 핵심은 다형성
@@ -224,3 +222,147 @@ Spring 공부
 - 다형성 만으로는 구현 객체를 변경할 때 클라이언트 코드도 함께 변경된다.
 - **다형성 만으로는 OCP, DIP를 지킬 수 없다.**
 - 다른 뭔가가 더 필요하다.
+
+## 객체 지향 설계와 스프링
+
+- **스프링은 다음 기술로 다형성 + OCP, DIP를 가능하게 지원한다.**
+  - DI(Dependency Injection): 의존관계, 의존성 주입
+  - DI 컨테이너 제공
+- **클라이언트 코드의 변경 없이 기능 확장**
+- 쉽게 부품을 교체하듯이 개발
+
+
+
+### 정리
+
+- 모든 설계에 **역할**과 **구현**을 분리하자.
+- 애플리케이션 설계도 공연을 설계 하듯이 배역만 만들어두고, 배우는 언제든지 **유연**하게 **변경**할 수 있도록 만드는 것이 좋은 객체지향 설계다.
+- 이상적으로는 모든 설계에 인터페이스를 부여하자
+
+#### 실무 고민
+
+- 인터페이스를 도입하면 추상화라는 비용이 발생한다.
+- 기능을 확장할 가능성이 없다면, 구체 클래스를 직접 사용하고, 향후 꼭 필요할 때 리팩토링해서 인터페이스를 도입하는 것도 방법이다.
+
+
+
+## Code안에서의 문제점들
+
+### 새로운 할인 정책 적용과 문제점
+
+할인 정책을 변경하려면 클라이언트인 `OrderServiceImpl`코드를 변경해야 한다.
+
+~~~java
+//    private DiscountPolicy discountPolicy = new FixDiscountPolicy();
+    private DiscountPolicy discountPolicy = new RateDiscountPolicy();
+~~~
+
+**문제점**
+
+- OCP, DIP 같은 객체지향 설계 원칙을 준수하지 못했다.
+  - DIP: 주문서비스 클라이언트(`OrderServiceImpl`)는  `DiscountPolicy`인터페이스에 의존하면서 DIP를 지킨것 같아보인다.
+  - 하지만 Code를 보면 인터페이스 뿐만 아니라 **구체(구현) 클래스에도 의존**하고 있다.
+    - 추상(인터페이스) 의존: `DiscountPolicy`
+    - 구체(구현) 클래스 의존: `FixDiscountPolicy`, `RateDiscountPolicy`
+  - OCP: **의존관계를 변경하는순간 클라이언트 코드도 변경된다. OCP 위반**
+
+
+
+### 관심사의 분리
+
+### 관심사를 분리하자
+
+ex) 연극
+
+- 배우는 본인의 역할인 배역을 수행하는 것에만 집중해야 한다.
+- 디카프리오는 어떤 여자 주인공이 선택되더라도 똑같이 공연을 할 수 있어야한다.
+- 공연을 구성하고, 담당 배우를 섭외하고, 역할에 맞는 배우를 지정하는 책임을 담당하는 별도의 **공연 기획자**가 필요하다.
+- 공연 기획자를 만들고 배우와 공연 기획자의 책임을 확실히 분리해야 한다.
+
+
+
+### Appconfig의 등장
+
+애플리케이션의 전체 동작 방식을 구성(config)하기 위해, **구현 객체를 생성**하고, **연결**하는 책임을 가지는 별도의 설정 클래스 생성
+
+~~~java
+public class AppConfig {
+
+    public MemberService memberService() {
+        return new MemberServiceImpl(new MemoryMemberRepository());
+    }
+
+    public OrderService orderService() {
+        return new OrderServiceImpl(new MemoryMemberRepository(), new FixDiscountPolicy());
+    }
+}
+~~~
+
+- AppConfig는 애플리케이션의 실제 동작에 필요한 **구현 객체를 생성**한다
+
+  - `MemberServiceImpl`
+  - `MemoryMemberRepository`
+  - `OrderServiceImpl`
+  - `FixDiscountPolicy`
+
+- AppConfig는 생성한 객체 인스턴스의 참조(레퍼런스)를 **생성자를 통해서 주입(연결)**해준다.
+
+  - `MemberServiceImpl` -> `MemoryMemberRepository`
+
+  - `OrderServiceImpl` -> `MemoryMemberRepository`, `FixDiscountPolicy`
+
+
+
+**MembServiceImpl - 생성자 주입**
+
+~~~java
+public class MemberServiceImpl implements MemberService{
+
+    private final MemberRepository memberRepository;
+
+    public MemberServiceImpl(MemberRepository memberRepository) {
+        this.memberRepository = memberRepository;
+    }
+
+    @Override
+    public void join(Member member) {
+        memberRepository.save(member);
+    }
+
+    @Override
+    public Member findMember(Long memberId) {
+        return memberRepository.findById(memberId);
+    }
+}
+~~~
+
+- 설계 변경으로 `MemberServiceImpl`은 `MemoryMemberRepository`를 의존하지 않는다.
+- 단지 `MemberRepository`인터페이스에만 의존한다.
+- `MemberServiceImpl`입장에서 생성자를 통해 어떤 구현 객체가 들어올지(주입될지)는 알 수 없다.
+- `MemberServiceImpl`의 생성자를 통해서 어떤 구현 객체를 주입할지는 오직 외부(`AppConfig`)에서 결정된다.
+- `MemberServiceImpl`은 이제부터 **의존관계에 대한 고민은 **외부에 맡기고, **실행에만 집중**하면 된다.
+
+
+
+~~~
+memoryMemberRepository(x001)
+        ↑
+			  |
+			  |
+  	  1. 생성
+        |
+     AppConfig ----- 2. 생성 주입(MemoryMemberRepository(x001)) --→ MemberServiceImpl
+~~~
+
+- `AppConfig`객체는 `memoryMemberRepository`객체를 생성하고 그 참조값을 `memberServiceImpl`을 생성하면서 생성자로 전달한다.
+- 클라이언트인 `memberServiceImpl`입장에서 보면 의존관계를 마치 외부에서 주입해주는 것 같다고 해서 DI(Dependency Injection)우리말로 의존관계 주입 또는 의존성 주입이라고 한다.
+
+##### 정리
+
+- AppConfig를 통해서 관심사를 확실하게 분리했다.
+- 배역, 배우를 생각해보자
+- AppConfig는 공연 기획자다.
+- AppConfig는 구체 클래스를 선택한다. 애플리케이션이 어떻게 동작해야 할지 전체 구성을 책임진다.
+- 이제 각 배우들은 담당 기능을 실행하는 책임만 지면된다.
+- `MemberServiceImpl`, `OrderServiceImpl`은 기능을 실행하는 책임만 지면 된다.
+
