@@ -608,3 +608,109 @@ AnnotationConfigApplicationContext ac = new AnnotationConfigApplicationContext(S
     }
 ~~~
 
+### BeanFactory와 Application Context
+
+#### BeanFactory
+
+- 스프링 컨테이너의 최상위 인터페이스이다.
+- 스프링 빈을 관리하고 조회하는 역할을 담당한다.
+- `getBean()`을 제공한다.
+- 지금까지 우리가 사용했던 대부분의 기능은 BeanFactory가 제공하는 기능이다.
+
+
+
+#### ApplicationContext
+
+- BeanFactory 기능을 모두 상속받아서 제공한다.
+- 애플리케이션을 개발할 때는 빈을 관리하고, 조회하는 기능은 물론이고, 수 많은 부가기능이 필요하다.
+
+
+
+**ApplicationContext가 제공하는 부가기능**
+
+- 메시지소스를 활용한 국제화 기능
+  - 예를 들어서 한국에서 들어오면 한국어로, 영어권에서 들어오면 영어로 출력
+- 환경변수
+  - 로컬, 개발, 운영등을 구분해서 처리
+- 애플리케이션 이벤트
+  - 이벤트를 발행하고 구독하는 모델을 편리하게 지원
+- 편리한 리소스 조회
+  - 파일, 클래스패스, 외부 등에서 리소스를 편리하게 조회
+
+
+
+#### 정리
+
+- ApplicationContext는 BeanFactory의 기능을 상속받는다.
+- ApplicationContext는 빈 관리기능 + 편리한 부가 기능을 제공한다.
+- BeanFactory를 직접 사용할 일은 거의 없다. 부가기능이 포함된 ApplicationContext를 사용한다.
+- BeanFactory나 ApplicationContext를 스프링 컨테이너라 한다.
+
+
+
+### 스프링 빈 설정 메타 정보 - BeanDefinition
+
+- 스프링은 BeanDefinition이라는 인터페이스를 통해 다양한 설정 형식을 지원한다.
+  - ex)
+  - XML을 읽어서 BeanDefinition을 만들면 된다.
+  - 자바 코드를 읽어서 BeanDefinition을 만들면 된다.
+  - 스프링 컨테이너는 자바 코드인지, XML인지 몰라도 된다. 오직 BeanDefinition만 알면 된다.
+- `BeanDefinition`을 빈 설정 메타정보라 한다.
+  - `@Bean`, `<bean>`당 각각 하나씩 메타 정보가 생성된다.
+
+
+
+#### BeanDefinitino 정보
+
+- BeanClassName: 생성할 빈의 클래스명(자바 설정 처럼 팩토리 열할의 빈을 사용하면 없음)
+- factoryBeanName: 팩토리 역할의 빈을 사용할 경우 이름 , 예) appConfig
+- factoryMehtodName: 빈을 생성할 팩토리 메서드 지정, 예) memberService
+- Scope: 싱글톤(기본값)
+- lazyInit: 스프링 컨테이너를 생성할 때 빈을 생성하는 것이 아니라, 실제 빈을 사용할 때 까지 최대한 생성을 지연처리 하는지 여부
+- InitMethodName: 빈을 생성하고, 의존관계를 적용한 뒤에는 호출되는 초기화 메서드 명
+- DestoryMethodName: 빈의 생명주기가 끝나서 제거하기 직전에 호출되는 메서드 명
+- Constructor arguments, Properties: 의존관계 주입에서 사용한다. (자바 설정 처럼 팩토리 역할의 빈을 사용하면 없음)
+
+
+
+## 싱글톤 컨테이너
+
+### 싱글톤 패턴
+
+- 클래스 인스턴스가 1개만 생성되는 것을 보장하는 디자인 패턴이다.
+- 객체 인스턴스를 2개이상 생성하지 못하도록 막아야 한다.
+  - private 생성자를 사용해서 외부에서 임의로 new 키워드를 사용하지 못하도록 막아야 한다.
+
+~~~java
+public class SingletonService {
+    private static final SingletonService instance = new SingletonService();
+
+    public static SingletonService getInstance() {
+        return instance;
+    }
+
+    private SingletonService() {
+    }
+
+    public void logic() {
+        System.out.println("싱글톤 객체 로직 호출");
+    }
+}
+~~~
+
+1. static 영역에 객체 instance를 미리 하나 생성해서 올려둔다.
+2. 이 객체 인스턴스가 필요하면 오직 `getInstance()`를 통해서만 조회할 수 있다. 이 메서드를 호출하면 항상 같은 인스턴스가 반환된다.
+3. 딱 1개의 객체 인스턴스만 존재해야 하므로, 생성자를 private으로 막아서 혹시라도 외부에서 new 키워드로 객체 인스턴스가 생성되는 것을 막는다.
+
+
+
+#### 싱글톤 패턴 문제점
+
+- 싱글톤 패턴을 구현하는 코드 자체가 많이 들어간다.
+- 의존관계상 클라이언트가 구체 클래스에 의존해야 한다. -> DIP를 위반한다.
+- 클라이언트가 구체 클래스에 의존해서 OCP원칙을 위반할 가능성이 높다.
+- 테스트하기 어렵다.
+- 내부 속성을 변경하거나 초기화 하기 어렵다.
+- private 생성자로 자식 클래스를 만들기 어렵다.
+- 결론적으로 유연성이 떨어진다.
+- 안티패턴으로 불리기도 한다.
