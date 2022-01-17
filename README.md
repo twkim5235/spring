@@ -783,3 +783,55 @@ public class StatefulServiceTest {
 - `StatefulService`의 `price`필드는 공유되는 필드인데, 특정 클라이언트 값을 변경한다.
 - 사용자A의 주문금액은 10000원이여야 하는데, 20000원으로 결과가 나온다.
 - **이러한 문제와 같이 공유필드는 조심해야 하며, 스프링 빈은 항상 무상태(stateless)로 설계해야 한다.**
+
+#### @Configuration과 바이트코드 조작의 마법
+
+~~~java
+@Test
+    void configurationDeep() {
+        AnnotationConfigApplicationContext ac = new AnnotationConfigApplicationContext(AppConfig.class);
+        AppConfig bean = ac.getBean(AppConfig.class);
+
+        System.out.println("bean.getClass() = " + bean.getClass());
+				//bean.getClass() = class hello.core.AppConfig$$EnhancerBySpringCGLIB$$ad42d7f4
+    }
+~~~
+
+- AppConfig도 스프링 빈으로 등록이 된다.
+- AppConfig의 클래스 정보를 조회했을 때 `class hello.core.AppConfig`로 나올거라는 예상과 달리 `class hello.core.AppConfig$$EnhancerBySpringCGLIB...` 이렇게 나왔다.
+
+이러한 이유는 스프링이 CGLIB이라는 바이트코드 조작 라이브러리를 사용해서 AppConfig클래스를 상속받은 임의의 다른 클래스를 만들고, 다른 클래스를 스프링 빈으로 등록한 것이다. 해당의 임의의 클래스가 싱글톤이 보장되도록 해준다.
+
+
+
+##### `@Configuration`을 적용하지 않고 `@Bean`만 적용했을 시
+
+~~~java
+//@Configuration
+public class AppConfig {
+...
+}
+---------------------------
+@Test
+    void configurationDeep() {
+        AnnotationConfigApplicationContext ac = new AnnotationConfigApplicationContext(AppConfig.class);
+        AppConfig bean = ac.getBean(AppConfig.class);
+
+        System.out.println("bean.getClass() = " + bean.getClass());
+    }
+----------------------------
+call AppConfig.memberService
+call AppConfig.memberRepository
+call AppConfig.orderService
+call AppConfig.memberRepository
+call AppConfig.memberRepository
+bean.getClass() = class hello.core.AppConfig
+~~~
+
+**싱글톤이 깨져버린다!!**
+
+##### 정리
+
+- @Bean만 사용해도 스프링 빈으로 등록되지만, 싱글톤은 보장하지 않는다.
+  - `memberRepository()`처럼 의존관계 주입이 필요해서 메서드를 직접 호출할 때 싱글톤을 보장하지 않는다.
+- 그러니 스프링 설정 정보는 항상 `@Configuration`을 사용하자
