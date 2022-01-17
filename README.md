@@ -660,7 +660,7 @@ AnnotationConfigApplicationContext ac = new AnnotationConfigApplicationContext(S
 
 
 
-#### BeanDefinitino 정보
+#### BeanDefinitinon 정보
 
 - BeanClassName: 생성할 빈의 클래스명(자바 설정 처럼 팩토리 열할의 빈을 사용하면 없음)
 - factoryBeanName: 팩토리 역할의 빈을 사용할 경우 이름 , 예) appConfig
@@ -714,3 +714,72 @@ public class SingletonService {
 - private 생성자로 자식 클래스를 만들기 어렵다.
 - 결론적으로 유연성이 떨어진다.
 - 안티패턴으로 불리기도 한다.
+
+
+
+### 싱글톤 컨테이너
+
+스프링 컨테이너는 싱글톤 패턴의 문제점을 해결하면서, 객체 인스턴스를 싱글톤(1개만 생성)으로 관리한다.
+
+
+
+**싱글톤 컨테이너**
+
+- 스프링 컨테이너는 싱글톤 패턴을 적용하지 않아도, 객체 인스턴스를 싱글톤으로 관리한다.
+- 스프링 컨테이너는 싱글톤 컨테이너 역할을 한다. 이렇게 싱글톤 객체를 생성하고 관리하는 기능을 싱글톤 레지스트리라 한다.
+- 스프링 컨테이너의 이런 기능 덕분에 싱글톤 패턴의 모든 단점을 해결하면서, 객체를 싱글톤으로 유지할 수 있다.
+  - 싱글톤 패턴을 위한 지저분한 코드가 들어가지 않아도 된다.
+  - DIP, OCP, 테스트, private 생성자로부터 자유롭게 싱글톤을 사용할 수 있다.
+
+
+
+**참고**
+
+- 스프링의 기본 빈 등록 방식은 싱글톤이지만, 싱글톤 방식만 지원하는 것은 아니다. 요청할 때 마다 새로운 객체를 생성해서 반환하는 기능도 제공한다.
+
+
+
+### 싱글톤 방식의 주의점
+
+- 싱글톤 패턴이드, 스프링 같은 싱글톤 컨테이너를 사용하든, 객체 인스턴스를 하나만 생성해서 공유하는 싱글톤 방식은 여러 클라이언트가 하나의 같은 객체 인스턴스를 공유하기 때문에 싱글톤 객체는 상태를 유지(stateful)하게 설계하면 안된다.
+- 무상태(statless)로 설계해야 한다!
+  - 특정 클라이언트에 의존적인 필드가 있으면 안된다.
+  - 특정 클라이언트가 값을 변경할 수 있는 필드가 있으면 안된다.
+  - 가급적 읽기만 가능해야 한다.
+  - 필드 대신에 자바에서 공유되지 않는, 지역변수, 파라미터, ThreadLocal등을 사용해야 한다.
+- **스프링 빈의 필드에 공유 값을 설정하면 정말 큰 장애가 발생할 수 있다!!**
+
+~~~java
+public class StatefulServiceTest {
+
+    @Test
+    void statefulServiceSingleton() {
+        AnnotationConfigApplicationContext ac = new AnnotationConfigApplicationContext(TestConfig.class);
+        StatefulService statefulService1 = ac.getBean(StatefulService.class);
+        StatefulService statefulService2 = ac.getBean(StatefulService.class);
+
+        //ThreadA: A사용자가 10000원 주문
+        statefulService1.order("userA", 10000);
+        //ThreadB: B사용자가 20000원 주문
+        statefulService2.order("userB", 20000);
+
+        //ThreadA: 사용자A 주문 금액 조회
+        int price = statefulService1.getPrice();
+        System.out.println("price = " + price);
+
+        assertThat(statefulService1.getPrice()).isEqualTo(20000);
+    }
+
+    static class TestConfig{
+        @Bean
+        public StatefulService statefulService() {
+            return new StatefulService();
+        }
+    }
+}
+~~~
+
+- ThreadA가 사용자A 코드를 호출하고, ThreadB가 사용자B 코드를 호출한다고 가정하자
+- `StatefulService`의 `price`필드는 공유되는 필드인데, 특정 클라이언트 값을 변경한다.
+- 사용자A의 주문금액은 10000원이여야 하는데, 20000원으로 결과가 나온다.
+- **이러한 문제와 같이 공유필드는 조심해야 하며, 스프링 빈은 항상 무상태(stateless)로 설계해야 한다.**
