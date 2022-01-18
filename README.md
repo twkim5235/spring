@@ -835,3 +835,213 @@ bean.getClass() = class hello.core.AppConfig
 - @Bean만 사용해도 스프링 빈으로 등록되지만, 싱글톤은 보장하지 않는다.
   - `memberRepository()`처럼 의존관계 주입이 필요해서 메서드를 직접 호출할 때 싱글톤을 보장하지 않는다.
 - 그러니 스프링 설정 정보는 항상 `@Configuration`을 사용하자
+
+## 컴포넌트 스캔
+
+### 컴포넌트 스캔과 의존관계 자동 주입
+
+- 스프링은 설정정보 없이, 자동으로 스프링 빈을 등록하는 컴포넌트 스캔이라는 기능을 제공한다.
+- 의존관계도 자동으로 주입하는 `@Autowired`라는 기능도 제공한다.
+
+~~~java
+@Configuration
+@ComponentScan(
+        excludeFilters = @ComponentScan.Filter(type = FilterType.ANNOTATION, classes = Configuration.class)
+)
+public class AutoAppConfig {
+    
+}
+~~~
+
+**참고**:컴포넌트 스캔을 사용하려면 `@Configuration`이 붙은 설정 정보도 자동으로 등록되기 때문에 AppConfig, TestConfig등 앞서 만들어두었던 설정 정보도 함께 등록되고, 실행되어 버린다. 그래서 `excluedFilter`를 이용해서 설정정보는 컴포넌트 스캔 대상에서 제외했다.
+
+
+
+컴포넌트 스캔은 이름 그대로 `@Component`애노테이션이 붙은 클래스를 스캔해서 스프링 빈으로 등록한다.
+
+~~~java
+@Component
+public class MemberServiceImpl implements MemberService{
+
+    private final MemberRepository memberRepository;
+
+    @Autowired
+    public MemberServiceImpl(MemberRepository memberRepository) {
+        this.memberRepository = memberRepository;
+    }
+
+    @Override
+    public void join(Member member) {
+        memberRepository.save(member);
+    }
+
+    @Override
+    public Member findMember(Long memberId) {
+        return memberRepository.findById(memberId);
+    }
+
+    //테스트 용도
+    public MemberRepository getMemberRepository() {
+        return memberRepository;
+    }
+}
+~~~
+
+- 이전의 AppConfig에서는 `@Bean`으로 직접 설정 정보를 작성했고, 의존관계도 직접 명시했다. 이제는 이런 설정정보 자체가 없기 때문에, 의존관계 주입도 이 클래스 안에서 해결해야 한다.
+
+
+
+**1. ComponentScan**
+
+- `@ComponentScan`은 `@Coponent`가 붙은 모든 클래스를 스프링 빈으로 등록한다.
+- 스프링 빈의 기본이름은 클래스명을 사용하되 맨 앞글자만 소문자를 사용한다.
+  - **빈 이름 기본 전략:** MemberServiceImpl 클래스 -> memberServiceImpl
+  - **빈 이름 직접 지정:** 만약 스프링 빈의 이름을 지정하고 싶으면 `@Component("memberServiceImpl")`와 같이 이름을 부여하면 된다.
+
+
+
+**2. @Autowired 의존관계 자동 주입**
+
+- 생성자에 `@Autowired`를 지정하면, 스프링 컨테이너가 자동으로 해당 스프링 빈을 찾아서 주입한다.
+- 기본 조회 전략은 타입이 같은 빈을 찾아서 주입한다.
+  - `getBean(MemberRepository.class)`와 동일하다고 이해하면 된다.
+
+
+
+### 탐색 위치와 기본 스캔 대상
+
+#### 탐색할 패키지의 시작 위치 지정
+
+~~~java
+@Configuration
+@ComponentScan(
+        basePackages = "hello.core",
+        excludeFilters = @ComponentScan.Filter(type = FilterType.ANNOTATION, classes = Configuration.class)
+)
+public class AutoAppConfig {
+    
+}
+~~~
+
+- `basePackages`: 탐색할 패키지의 시작위치를 지정한다. 이 패키지를 포함해서 하위 패키지를 모두 탐색한다.
+  - `basePackages = {"hello.core", "hello.service"}`와 같이 여러 시작 위치를 지정할 수 있다.
+- `basePackageClasses`: 지정한 클래스의 패키지를 탐색 시작 위치로 지정한다.
+- 만약 지정하지 않으면 `@ComponentScan`이 붙은 설정 정보 클래스의 패키지가 시작 위치가 된다.
+
+**권장 방법**
+
+패키지 위치를 지정하지 않고, 설정 정보 클래스의 위치를 프로젝트 최상단에 두는 것이다. 최근 스프링 부트도 이 방법을 기본으로 제공한다.
+
+
+
+#### 컴포넌트 스캔 기본 대상
+
+컴포넌트 스캔은 `@Component`뿐만 아라 다음과 같은 내용도 추가로 대상에 포함된다.
+
+- `@Component`: 컴포넌트 스캔에서 사용
+- `@Controller`: 스프링 MVC 컨트롤러에서 사용
+- `@Service`: 스프링 비즈니스 로직에서 사용
+- `@Repository`: 스프링 데이터 접근 계층에서 사용
+- `@Configuration`: 스프링 설정 정보에서 사용
+
+
+
+### 필터
+
+`includeFilters`: 컴포넌트 스캔 대상을 추가한다.
+
+`excludeFilter`: 컴포넌트 스캔 대상에서 제거한다.
+
+~~~java
+@Target(ElementType.TYPE)
+@Retention(RetentionPolicy.RUNTIME)
+@Documented
+public @interface MyIncludeComponent {
+}
+
+@Target(ElementType.TYPE)
+@Retention(RetentionPolicy.RUNTIME)
+@Documented
+public @interface MyExcludeComponent {
+}
+~~~
+
+```java
+@Configuration
+@ComponentScan(
+        includeFilters = @Filter(type = FilterType.ANNOTATION, classes = MyIncludeComponent.class),
+        excludeFilters = @Filter(type = FilterType.ANNOTATION, classes = MyExcludeComponent.class)
+)
+static class ComponentFilterAppConfig{
+
+}
+```
+
+- `MyIncludeComponet`는 `includeFilters`에 등록하여 해당 Bean들은 스프링 Bean에 등록됬다.
+- `MyExcludeComponet`는 `excludeFilters`에 등록하여 해당 Bean들은 스프링 Bean에 등록되지 않았다.
+
+
+
+#### Filtery Type 옵션
+
+ANNOTATION: 기본값, 어노테이션을 인식해서 동작한다.
+
+- ex) `org.example.SomeAnnotation`
+
+ASSGINABLE_TYPE: 지정한 타입과 자식 타입을 인식해서 동작한다.
+
+- ex) `org.example.SomeClass`
+
+ASPECTJ: AspectJ 패턴 사용
+
+- ex) `org.example..*Service+`
+
+REGEX: 정규 표현식
+
+- ex) `org\.example\.Default.*`
+
+CUSTOM: `TypeFilter`이라는 이넡페이스를 구현해서 처리
+
+- ex) `org.example.MyTypeFilter`
+
+
+
+### 중복 등록과 충돌
+
+충돌이 생기는 두가지 상황
+
+1. 자동 빈 등록 vs 자동 빈 등록
+2. 수동 빈 등록 vs 자동 빈 등록
+
+
+
+#### 자동 빈 등록 vs 자동 빈 등록
+
+- 컴포넌트 스캔에 의해 자동으로 스프링 빈이 등록되는데, 그 이름이 같은 경우 스프링은 오류를 발생시킨다.
+  - `ConflictingBeanDefinitionException`예외 발생
+
+
+
+#### 수동 빈 등록 vs 자동 빈 등록
+
+~~~java
+		//기존에 등록된 Bean 이름과 동일하게 Bean 등록
+		@Bean(name = "memoryMemberRepository")
+    public MemberRepository memberRepository() {
+        return new MemoryMemberRepository();
+    }
+~~~
+
+이 경우 수동 빈 등록이 우선권을 가진다.
+
+(수동 빈이 자동 빈을 오버라이딩 해버린다.)
+
+**수동 빈 등록시 남는 로그**
+
+~~~tex
+Overriding bean definition for bean 'memoryMemberRepository' with a different definition: replacing
+~~~
+
+보통 해당 충돌은 개발자가 의도해서 나타난게 아니라 설정들이 꼬여서 만들어지는 경우가 대부분이다. 
+
+그래서 최근 스프링 부트는 수동 빈 등록과 자동 빈 등록이 충돌이나면 오류가 발생하도록 기본값을 바꾸었다.
