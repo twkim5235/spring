@@ -1045,3 +1045,158 @@ Overriding bean definition for bean 'memoryMemberRepository' with a different de
 보통 해당 충돌은 개발자가 의도해서 나타난게 아니라 설정들이 꼬여서 만들어지는 경우가 대부분이다. 
 
 그래서 최근 스프링 부트는 수동 빈 등록과 자동 빈 등록이 충돌이나면 오류가 발생하도록 기본값을 바꾸었다.
+## 의존관계 자동 주입
+
+### 다양한 의존관계 주입 방법
+
+의존관계 주입은 크게 4가지 방법이 있다.
+
+- 생성자 주입
+- 수정자 주입(setter 주입)
+- 필드 주입
+- 일반 메서드 주입
+
+
+
+### 생성자 주입
+
+- 이름 그대로 생성자를 통해서 의존 관계를 주입 받는 방법이다.
+- 특징
+  - 생성자 호출시점에 딱 1번만 호출되는 것이 보장된다.
+  - **불변, 필수** 의존관계에 사용
+
+~~~java
+@Component
+public class OrderServiceImpl implements OrderService{
+
+    private final MemberRepository memberRepository;
+    private final DiscountPolicy discountPolicy;
+
+    @Autowired
+    public OrderServiceImpl(MemberRepository memberRepository, DiscountPolicy discountPolicy) {
+        this.memberRepository = memberRepository;
+        this.discountPolicy = discountPolicy;
+    }
+}
+~~~
+
+**중요 생성자가 딱 1개만 있으면 @Autowired를 생략해도 자동 주입된다.** 물론 스프링 빈에만 적용된다.
+
+~~~java
+@Component
+public class OrderServiceImpl implements OrderService{
+
+    private final MemberRepository memberRepository;
+    private final DiscountPolicy discountPolicy;
+
+    public OrderServiceImpl(MemberRepository memberRepository, DiscountPolicy discountPolicy) {
+        this.memberRepository = memberRepository;
+        this.discountPolicy = discountPolicy;
+    }
+}
+~~~
+
+생성자 주입은 빈을 등록하면서 의존관계도 함께 주입한다.
+
+
+
+### 수정자 주입
+
+- Setter라 불리는 필드의 값을 변경하는 수정자 메서드를 사용하여 주입 받는 방법이다.
+- 특징
+  - **선택, 변경** 가능성이 있는 의존관계에 사용
+  - 자바빈 프로퍼티 규약의 수정자 메서드 방식을 사용하는 방법이다.
+
+~~~java
+@Component
+public class OrderServiceImpl implements OrderService{
+
+    private MemberRepository memberRepository;
+    private DiscountPolicy discountPolicy;
+
+    @Autowired
+    public void setMemberRepository(MemberRepository memberRepository) {
+        this.memberRepository = memberRepository;
+    }
+
+    @Autowired
+    public void setDiscountPolicy(DiscountPolicy discountPolicy) {
+        this.discountPolicy = discountPolicy;
+    }
+}
+~~~
+
+> 참고: `@Autowired`의 기본동작은 주입할 대상이 없으면 오류가 발생한다. 주입할 대상이 없어도 동작하게 하려면 `@Autowired(required = false)`로 지정하면 된다. 
+
+> 참고: 자바빈 프로퍼티, 자바에서는 과거부터 필드의 값을 직접 변경하지 않고, setXxx, getXxx라는 메서드를 통해서 값을 읽거나 수정하는 규칙을 만들었다. 그것이 자바빈 프로퍼티 규약이다.
+
+
+
+### 필드 주입
+
+- 이름 그대로 필드에 바로 주입하는 방법이다.
+- 특징
+  - 코드가 간결해서 많은 개발자들을 유혹하지만 외부에서 변경이 불가능해서 테스트 하기가 어렵다.
+  - DI 프레임 워크가 없으면 아무것도 할 수 없다.
+    - 왜냐하면 순수한 Java 프로그램으로 Test할 시 에는 스프링이 없어 의존관계를 주입하지 못하기도 할 뿐더러 의존관계를 주입하려면 결국엔 setter를 만들어줘야 한다.
+  - 사용하지말자!
+    - 애플리케이션의 실제코드와 상관없는 테스트 코드
+    - 스프링 설정을 목적으로 하는 @Configuration 같은 곳에서만 특별한 용도로 사용
+
+
+
+### 일반 메서드 주입
+
+- 일반 메서드를 통해서 주입받을 수 있다.
+- 특징
+  - 한번에 여러 필드를 주입 받을 수 있다.
+  - 일반적으로 잘 사용하지 않는다.
+
+
+
+### 옵션 처리
+
+주입할 스프링 빈이 없어도 동작해야 할 때가 있다.
+
+그런데 `@Autpwired`만 사용하면 `required`옵션의 기본값이 `true`로 되어있어서 자동 주입 대상이 없으면 오류가 발생한다.
+
+
+
+자동 주입 대상을 옵션으로 처리하는 방법은 다음과 같다.
+
+- `@Autowired(required=false)`: 자동 주입할 대상이 없으면 수정자 메소드 자체가 호출이 안됨
+- `org.springframework.lang.@Nullable`: 자동 주입할 대상이 없으면 null이 입력된다.
+- `Optional<>`: 자동 주입할 대상이 없으면 `Optional.empty`가 입력된다.
+
+~~~java
+public class AutowiredTest {
+
+    @Test
+    void AutoWiredOption() {
+        ApplicationContext ac = new AnnotationConfigApplicationContext(TestBean.class);
+    }
+
+    static class TestBean{
+
+        @Autowired(required = false)//spring bean 없는 객체를 주입
+        public void setNoBean1(Member noBean1) {
+            System.out.println("noBean1 = " + noBean1);
+        }
+
+        @Autowired
+        public void setNoBean2(@Nullable Member noBean2) {
+            System.out.println("noBean2 = " + noBean2);
+        }
+
+        @Autowired
+        public void setNoBean3(Optional<Member> noBean3) {
+            System.out.println("noBean3 = " + noBean3);
+        }
+    }
+}
+~~~
+
+- **Member는 스프링빈이 아니다.**
+- `setNoBean1()`은 `@Autowired(required=false)`이므로 호출 자체가 안된다.
+
+> 참고: @Nullable, Optional은 스프링 전반에 걸쳐서 지원된다. 예를 들어서 생성자 자동주입에서 특정 필드에만 사용해도 된다.
