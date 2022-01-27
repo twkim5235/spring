@@ -1200,3 +1200,187 @@ public class AutowiredTest {
 - `setNoBean1()`은 `@Autowired(required=false)`이므로 호출 자체가 안된다.
 
 > 참고: @Nullable, Optional은 스프링 전반에 걸쳐서 지원된다. 예를 들어서 생성자 자동주입에서 특정 필드에만 사용해도 된다.
+
+### 조회 빈이 2개 이상 - 문제
+
+`@Autowired`는 타입(Type)으로 조회한다.
+
+~~~java
+@Autowired
+private DiscountPolicy discountPolicy
+~~~
+
+타입으로 조회하기 때문에, 마치 다음 코드와 유사하게 동작한다. (실제로는 더 많은 기능을 제공한다.)
+
+`ac.getBean(DiscountPolicy.class)`
+
+
+
+스프링 빈 조회에서 타입으로 조회하면 선택된 빈이 2개 이상일 때 문제가 발생한다.
+
+`DiscountPolicy`의 하위 타입인 `FixDisocuntPolicy`,  `RateDisocuntPolicy` 둘 다 스프링 빈으로 선언해보자.
+
+~~~java
+@Component
+public class FixDiscountPolicy implements DiscountPolicy{
+  ...
+}
+~~~
+
+~~~java
+@Component
+public class RateDiscountPolicy implements DiscountPolicy{
+  ...
+}
+~~~
+
+
+
+그리고 이렇게 의존관계 자동 주입을 실행하면
+
+~~~java
+@Autowired
+private DiscountPolicy discountPolicy
+~~~
+
+
+
+`NoUniqueBeanDefinitionException` 오류가 발생한다.
+
+~~~bash
+org.springframework.beans.factory.NoUniqueBeanDefinitionException: No qualifying bean of type 'hello.core.discount.DiscountPolicy' available: expected single matching bean but found 2: fixDiscountPolicy,rateDiscountPolicy
+~~~
+
+이 때 하위타입으로 지정할 수 도 있지만 , 하위 타입으로 지정하는 것은 DIP를 위배하고 유연성이 떨어진다. 그리고 이름만 다르고, 완전히 똑같은 스프링 빈이 2개 있을 때 해결이 안된다.
+
+스프링 빈을 수동 등록해서 문제를 해결해도 되지만, 의존 관계 자동 주입에서 해결하는 여러 방법이 있다.
+
+
+
+### @Autowired 필드 명, @Qualifier, @Primary
+
+조회 대상 빈이 2개 이상일 때 해결 방법
+
+- @Autowired 필드명 매칭
+- @Qualifier -> @Qualifier끼리 매칭 -> 빈이름 매칭
+- @Primary 사용
+
+
+
+#### @Autowired 필드 명 매칭
+
+`@Autowired`는 타입 매칭을 시도하고, 이때 여러 빈이 있으면 필드 이름, 파라미터 이름으로 빈 이름을 추가 매칭한다.
+
+
+
+기존 코드
+
+~~~java
+@Autowired
+public OrderServiceImpl(MemberRepository memberRepository, DiscountPolicy discountPolicy) {
+  this.memberRepository = memberRepository;
+  this.discountPolicy = discountPolicy;
+}
+~~~
+
+
+
+필드 명을 빈이름으로 변경
+
+~~~java
+@Autowired
+public OrderServiceImpl(MemberRepository memberRepository, DiscountPolicy rateDiscountPolicy) {
+	this.memberRepository = memberRepository;
+  this.discountPolicy = rateDiscountPolicy;
+}
+~~~
+
+필드명이 `rateDiscountPolicy`이므로 정상 주입된다.
+
+**필드명 매칭은 먼저 타입 매칭을 시도하고 그결과에 여러 빈이 있을 때 추가로 동작하는 기능이다.**
+
+
+
+**@Autowired매칭 정리**
+
+1. 타입 매칭
+2. 타입 매칭의 결과가 2개 이상일 때 필드 명, 파라미터 명으로 빈이름 매칭
+
+
+
+#### @Qualifier 사용
+
+`@Qualifer`는 추가 구분자를 붙여주는 방법이다. 주입 시 추가적인 방법을 제공하는 것이지 빈 이름을 변경하는 것이 아니다.
+
+~~~java
+@Component
+@Qualifier("mainDiscountPolicy")
+public class RateDiscountPolicy implements DiscountPolicy{
+}
+~~~
+
+**주입시에 @Qualifier를 붙여주고 등록한 이름을 적어준다.**
+
+
+
+**생성자 자동주입 예시**
+
+~~~java
+@Autowired
+public OrderServiceImpl(MemberRepository memberRepository, @Qualifier("mainDiscountPolicy") DiscountPolicy discountPolicy) {
+	this.memberRepository = memberRepository;
+  this.discountPolicy = discountPolicy;
+}
+~~~
+
+
+
+**수정자 자동주입 예시**
+
+`````java
+@Autowired
+public DiscountPolicy setDiscountPolicy(@Qualifier("mainDiscountPolicy") DiscountPolicy discountPolicy){
+	return discountPolicy;
+}
+```
+
+`Qualifier`로 주입할 때 `@Qualifier("mainDiscountPolicy")`를 못찾으면 어떻게 될까? 그러면 mainDiscountPolicy라는 이름의 스프링빈을 추가로 찾는다. 하지만 영한님의 경험상 `@Qualifer`는 `@Qualifer`를 찾는 용도로만 사용하는게 명확하고 좋다.
+
+
+
+**@Qualifier 정리**
+
+1. @Qualifier끼리 매칭
+2. 빈 이름 매칭
+3. `NoSuchBeanDefinition` 예외가 발생한다.
+
+
+
+#### @Primary 사용
+
+`@Primary`는 우선순위를 정하는 방법이다. @Autowired 시에 여러 빈이 매칭되면 `@Primary`가 우선권을 가진다.
+
+
+
+`rateDiscountPolicy`가 우선권을 가지도록 하자
+
+~~~java
+@Component
+@Primary
+public class RateDiscountPolicy implements DiscountPolicy()
+
+@Component
+public class fixDiscountPolicy implements DiscountPolicy()
+~~~
+
+
+
+**@Primary, @Qualifier 활용**
+
+코드에서 자주 사용하는 메인 데이터베이스의 커넥션을 획득하는 스프링 빈이 있고, 코드에서 특별한 기능으로 가끔 사용하는 서브 데이터베이스의 커넥션을 획득하는 스프링 빈이 있다고 생각해보자. 메인 데이터베이스의 커넥션을 획득하는 스프링빈은 `@Primary`를 적용해서 조회하는 곳에서 `@Qualifier`지정 없이 편리하게 조회하고, 서브 데이터베이스 커넥션 빈을 획득할 때는 `@Qualifier`를 지정해서 명시적으로 획득하는 방식으로 사용하면 코드를 깔끔하게 유지할 수 있다. 물론 이때 메인 데이터베이스의 스프링 빈을 등록할 때 `@Qualifier`를 지정해주는 것은 상관없다.
+
+
+
+**우선순위**
+
+`@Primary`는 기본값 처럼 동작하는 것이고 `@Qualifier`는 매우 상세하게 동작한다. 이런 경우 스프링은 자동보다는 수동이, 넓은 범위의 선택권보다는 좁은 범위의 선택권이 우선순위가 높다. 따라서 여기서도 `@Qualifier`가 우선권이 높다.
